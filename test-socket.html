@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AuctionIt — Live Bid Tester</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+    h1 { color: #1B3A6B; }
+    .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    input, button { padding: 10px; margin: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; }
+    button { background: #1B3A6B; color: white; border: none; cursor: pointer; }
+    button:hover { background: #E8722A; }
+    .log { background: #1a1a1a; color: #00ff00; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 13px; }
+    .success { color: #00ff00; }
+    .error { color: #ff4444; }
+    .info { color: #44aaff; }
+    .bid { color: #ffaa00; }
+    .status { padding: 8px 16px; border-radius: 20px; display: inline-block; font-weight: bold; }
+    .connected { background: #d4edda; color: #155724; }
+    .disconnected { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+
+<h1>🏷️ AuctionIt — Live Bid Tester</h1>
+
+<div class="card">
+  <h3>1. Connect</h3>
+  <input type="text" id="token" placeholder="Paste your JWT token here" style="width: 500px">
+  <button onclick="connect()">Connect</button>
+  <span id="status" class="status disconnected">Disconnected</span>
+</div>
+
+<div class="card">
+  <h3>2. Join Auction</h3>
+  <input type="text" id="auctionId" value="6c86b944-6de6-4315-bb1d-e6e070360aaf" style="width: 400px">
+  <button onclick="joinAuction()">Join Auction Room</button>
+</div>
+
+<div class="card">
+  <h3>3. Place Bid</h3>
+  <input type="text" id="lotId" value="5583dd95-ffa0-4c76-bfa4-a53b5832072d" style="width: 400px" placeholder="Lot ID">
+  <input type="number" id="bidAmount" value="25500" placeholder="Bid Amount (₹)">
+  <button onclick="placeBid()">Place Bid 💰</button>
+</div>
+
+<div class="card">
+  <h3>Live Log</h3>
+  <button onclick="clearLog()" style="background:#666; margin-bottom:10px">Clear Log</button>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+  let socket = null;
+
+  function log(message, type = 'info') {
+    const logDiv = document.getElementById('log');
+    const time = new Date().toLocaleTimeString('en-IN');
+    logDiv.innerHTML += `<div class="${type}">[${time}] ${message}</div>`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('log').innerHTML = '';
+  }
+
+  function connect() {
+    const token = document.getElementById('token').value.trim();
+    if (!token) { alert('Please paste your JWT token'); return; }
+
+    if (socket) socket.disconnect();
+
+    socket = io('http://localhost:5000', {
+      auth: { token }
+    });
+
+    socket.on('connect', () => {
+      document.getElementById('status').textContent = 'Connected ✅';
+      document.getElementById('status').className = 'status connected';
+      log('Connected to AuctionIt WebSocket server!', 'success');
+    });
+
+    socket.on('disconnect', () => {
+      document.getElementById('status').textContent = 'Disconnected';
+      document.getElementById('status').className = 'status disconnected';
+      log('Disconnected from server', 'error');
+    });
+
+    socket.on('connect_error', (err) => {
+      log(`Connection error: ${err.message}`, 'error');
+    });
+
+    socket.on('auction:state', (data) => {
+      log(`📊 Auction state received: ${data.auctionTitle} (${data.status})`, 'info');
+      log(`📦 Lots: ${data.lots.length} lots found`, 'info');
+      data.lots.forEach(lot => {
+        log(`   → ${lot.lot_number}: ${lot.title} | Current: ₹${lot.current_price} | Bids: ${lot.total_bids}`, 'info');
+      });
+    });
+
+    socket.on('bid:new', (data) => {
+      log(`💰 NEW BID: ₹${data.bid.amount} by ${data.bid.bidderName} on ${data.lotId}`, 'bid');
+      log(`   Current Price: ₹${data.lot.current_price} | Total Bids: ${data.lot.total_bids}`, 'bid');
+      if (data.extended) {
+        log(`⏰ ${data.message}`, 'success');
+      }
+    });
+
+    socket.on('bid:success', (data) => {
+      log(`✅ ${data.message}`, 'success');
+    });
+
+    socket.on('bid:error', (data) => {
+      log(`❌ Bid error: ${data.message}`, 'error');
+    });
+
+    socket.on('error', (data) => {
+      log(`❌ Error: ${data.message}`, 'error');
+    });
+  }
+
+  function joinAuction() {
+    if (!socket) { alert('Connect first!'); return; }
+    const auctionId = document.getElementById('auctionId').value.trim();
+    log(`🏠 Joining auction room: ${auctionId}...`, 'info');
+    socket.emit('auction:join', auctionId);
+  }
+
+  function placeBid() {
+    if (!socket) { alert('Connect first!'); return; }
+    const auctionId = document.getElementById('auctionId').value.trim();
+    const lotId = document.getElementById('lotId').value.trim();
+    const amount = parseFloat(document.getElementById('bidAmount').value);
+
+    if (!lotId || !amount) { alert('Enter lot ID and amount'); return; }
+
+    log(`💸 Placing bid of ₹${amount.toLocaleString('en-IN')}...`, 'info');
+    socket.emit('bid:place', { auctionId, lotId, amount });
+  }
+</script>
+
+</body>
+</html>

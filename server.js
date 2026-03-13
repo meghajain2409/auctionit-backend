@@ -5,9 +5,24 @@ const express     = require('express');
 const cors        = require('cors');
 const helmet      = require('helmet');
 const morgan      = require('morgan');
+const http        = require('http');
+const { Server }  = require('socket.io');
 
-const app  = express();
-const PORT = process.env.PORT || 5000;
+const app    = express();
+const server = http.createServer(app);
+const PORT   = process.env.PORT || 5000;
+
+// ─── SOCKET.IO SETUP ──────────────────────────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Make io accessible in controllers
+app.set('io', io);
 
 // ─── MIDDLEWARE ───────────────────────────────
 app.use(helmet());
@@ -53,9 +68,13 @@ app.get('/health', async (req, res) => {
 });
 
 // ─── API ROUTES ───────────────────────────────
-app.use('/api/auth',     require('./routes/authRoutes'));
-app.use('/api/auctions', require('./routes/auctionRoutes'));
-app.use('/api/auctions/:auctionId/lots', require('./routes/lotRoutes'));
+app.use('/api/auth',                        require('./routes/authRoutes'));
+app.use('/api/auctions',                    require('./routes/auctionRoutes'));
+app.use('/api/auctions/:auctionId/lots',    require('./routes/lotRoutes'));
+app.use('/api/bids',                        require('./routes/bidRoutes'));
+
+// ─── SOCKET.IO LIVE BIDDING ───────────────────
+require('./config/socket')(io);
 
 // ─── 404 HANDLER ─────────────────────────────
 app.use((req, res) => {
@@ -76,15 +95,16 @@ app.use((err, req, res, next) => {
 });
 
 // ─── START SERVER ─────────────────────────────
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('');
   console.log('  🏷️  AuctionIt API Server');
   console.log('  ─────────────────────────────');
   console.log(`  🚀  Running on  : http://localhost:${PORT}`);
   console.log(`  🌍  Environment : ${process.env.NODE_ENV}`);
   console.log(`  📅  Started at  : ${new Date().toLocaleString('en-IN')}`);
+  console.log(`  ⚡  WebSocket   : Active`);
   console.log('  ─────────────────────────────');
   console.log('');
 });
 
-module.exports = app;
+module.exports = { app, io };
