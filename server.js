@@ -72,6 +72,7 @@ app.use('/api/auth',                        require('./routes/authRoutes'));
 app.use('/api/auctions',                    require('./routes/auctionRoutes'));
 app.use('/api/auctions/:auctionId/lots',    require('./routes/lotRoutes'));
 app.use('/api/bids',                        require('./routes/bidRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 // ─── SOCKET.IO LIVE BIDDING ───────────────────
 require('./config/socket')(io);
