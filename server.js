@@ -75,7 +75,12 @@ app.use('/api/bids',                        require('./routes/bidRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 
 // ─── SOCKET.IO LIVE BIDDING ───────────────────
+// ─── SOCKET.IO LIVE BIDDING ───────────────────
 require('./config/socket')(io);
+
+// ─── AUCTION SCHEDULER ───────────────────────
+const { startScheduler } = require('./workers/auctionScheduler');
+startScheduler(io);
 
 // ─── 404 HANDLER ─────────────────────────────
 app.use((req, res) => {
