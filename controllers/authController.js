@@ -80,9 +80,7 @@ const sendOTP = async (req, res) => {
 
     // TODO: Send OTP via MSG91 (will integrate in Phase 6)
     // For now log to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`\n  📱 OTP for ${mobile}: ${otp}\n`);
-    }
+    console.log(`  📱 OTP for ${mobile}: ${otp}`);
 
     res.json({
       success: true,
