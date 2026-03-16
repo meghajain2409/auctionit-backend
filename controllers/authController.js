@@ -78,18 +78,30 @@ const sendOTP = async (req, res) => {
       [mobile, otpHash, purpose, expiresAt]
     );
 
-    // TODO: Send OTP via MSG91 (will integrate in Phase 6)
-    // For now log to console in development
+    // Log OTP
     console.log(`  📱 OTP for ${mobile}: ${otp}`);
 
     // Send real SMS
     const { sendOTPviaSMS } = require('../utils/sendSMS');
     await sendOTPviaSMS(mobile, otp);
-    
+
+    // Send OTP email as backup
+    const { sendOTPEmail } = require('../utils/sendEmail');
+    const userResult = await db.query(
+      'SELECT * FROM users WHERE mobile = $1',
+      [mobile]
+    );
+    if (userResult.rows[0]?.email) {
+      await sendOTPEmail(
+        userResult.rows[0].email,
+        otp,
+        userResult.rows[0].full_name
+      );
+    }
+
     res.json({
       success: true,
       message: `OTP sent to ${mobile}`,
-      // Only return OTP in development for testing
       ...(process.env.NODE_ENV === 'development' && { otp })
     });
 
@@ -136,7 +148,6 @@ const verifyOTPAndLogin = async (req, res) => {
 
     const session = sessionResult.rows[0];
 
-    // Check max attempts
     if (session.attempts >= 5) {
       return res.status(400).json({
         success: false,
@@ -144,11 +155,9 @@ const verifyOTPAndLogin = async (req, res) => {
       });
     }
 
-    // Verify OTP
     const isValid = await verifyOTP(otp, session.otp_hash);
 
     if (!isValid) {
-      // Increment attempts
       await db.query(
         'UPDATE otp_sessions SET attempts = attempts + 1 WHERE id = $1',
         [session.id]
@@ -159,13 +168,11 @@ const verifyOTPAndLogin = async (req, res) => {
       });
     }
 
-    // Mark OTP as verified
     await db.query(
       'UPDATE otp_sessions SET verified = TRUE WHERE id = $1',
       [session.id]
     );
 
-    // Get user
     const userResult = await db.query(
       `SELECT u.*, bp.kyc_status, bp.emd_wallet_balance
        FROM users u
@@ -176,13 +183,11 @@ const verifyOTPAndLogin = async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Update last login
     await db.query(
       'UPDATE users SET last_login_at = NOW() WHERE id = $1',
       [user.id]
     );
 
-    // Generate tokens
     const accessToken = generateAccessToken({
       userId: user.id,
       role: user.role,
@@ -191,19 +196,12 @@ const verifyOTPAndLogin = async (req, res) => {
 
     const refreshToken = generateRefreshToken();
     const refreshHash = await bcrypt.hash(refreshToken, 10);
-    const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    const refreshExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    // Save refresh token
     await db.query(
       `INSERT INTO refresh_tokens (user_id, token_hash, device_info, ip_address, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
-      [
-        user.id,
-        refreshHash,
-        req.headers['user-agent'],
-        req.ip,
-        refreshExpiry
-      ]
+      [user.id, refreshHash, req.headers['user-agent'], req.ip, refreshExpiry]
     );
 
     res.json({
@@ -247,7 +245,6 @@ const registerBidder = async (req, res) => {
       });
     }
 
-    // Verify OTP
     const sessionResult = await client.query(
       `SELECT * FROM otp_sessions
        WHERE mobile = $1
@@ -280,10 +277,8 @@ const registerBidder = async (req, res) => {
       });
     }
 
-    // Start transaction
     await client.query('BEGIN');
 
-    // Create user
     const userResult = await client.query(
       `INSERT INTO users (mobile, email, full_name, role, account_status)
        VALUES ($1, $2, $3, 'bidder', 'active')
@@ -293,21 +288,18 @@ const registerBidder = async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Create bidder profile
     await client.query(
       `INSERT INTO bidder_profiles (user_id, kyc_status)
        VALUES ($1, 'pending')`,
       [user.id]
     );
 
-    // Create notification preferences
     await client.query(
       `INSERT INTO notification_preferences (user_id)
        VALUES ($1)`,
       [user.id]
     );
 
-    // Mark OTP verified
     await client.query(
       'UPDATE otp_sessions SET verified = TRUE WHERE id = $1',
       [session.id]
@@ -315,7 +307,12 @@ const registerBidder = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Generate tokens
+    // Send welcome email
+    const { sendRegistrationEmail } = require('../utils/sendEmail');
+    if (email) {
+      await sendRegistrationEmail(email, fullName);
+    }
+
     const accessToken = generateAccessToken({
       userId: user.id,
       role: user.role,
@@ -374,7 +371,6 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // Find matching token
     const tokens = await db.query(
       `SELECT rt.*, u.id as user_id, u.role, u.mobile, u.account_status
        FROM refresh_tokens rt
@@ -406,13 +402,11 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // Revoke old token
     await db.query(
       'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1',
       [matchedToken.id]
     );
 
-    // Generate new tokens
     const newAccessToken = generateAccessToken({
       userId: matchedToken.user_id,
       role: matchedToken.role,

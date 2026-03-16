@@ -136,6 +136,19 @@ const approveKyc = async (req, res) => {
       [req.user.id, req.user.role, id]
     );
 
+    // Send KYC approved email
+    const { sendKycApprovedEmail } = require('../utils/sendEmail');
+    const bidderUser = await db.query(
+      'SELECT * FROM users WHERE id = $1',
+      [id]
+    );
+    if (bidderUser.rows[0]?.email) {
+      await sendKycApprovedEmail(
+        bidderUser.rows[0].email,
+        bidderUser.rows[0].full_name
+      );
+    }
+
     res.json({ success: true, message: 'KYC approved successfully' });
 
   } catch (err) {
