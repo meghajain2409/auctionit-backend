@@ -82,6 +82,10 @@ const sendOTP = async (req, res) => {
     // For now log to console in development
     console.log(`  📱 OTP for ${mobile}: ${otp}`);
 
+    // Send real SMS
+    const { sendOTPviaSMS } = require('../utils/sendSMS');
+    await sendOTPviaSMS(mobile, otp);
+    
     res.json({
       success: true,
       message: `OTP sent to ${mobile}`,
