@@ -158,12 +158,31 @@ const verifyOTPAndLogin = async (req, res) => {
 
 const registerBidder = async (req, res) => {
   try {
-    const { phone, email, name, company_name, city, state } = req.body;
+    const { phone, email, name, company_name, city, state, otp } = req.body;
 
-    if (!phone || !name) {
+    if (!phone || !name || !otp) {
       return res.status(400).json({
         success: false,
-        message: 'Phone and name are required'
+        message: 'Phone, name, and OTP are required'
+      });
+    }
+
+    // Verify OTP first
+    const otpResult = await db.query(
+      `SELECT * FROM otps
+       WHERE phone = $1
+       AND otp_code = $2
+       AND is_used = FALSE
+       AND expires_at > NOW()
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [phone, otp]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP'
       });
     }
 
@@ -179,6 +198,12 @@ const registerBidder = async (req, res) => {
         message: 'Mobile number already registered'
       });
     }
+
+    // Mark OTP as used
+    await db.query(
+      'UPDATE otps SET is_used = TRUE WHERE id = $1',
+      [otpResult.rows[0].id]
+    );
 
     // Create user
     const userResult = await db.query(
