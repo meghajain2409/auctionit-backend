@@ -37,19 +37,6 @@ const sendOTP = async (req, res) => {
       });
     }
 
-    // Check if user exists
-    const existingUser = await db.query(
-      'SELECT id FROM users WHERE phone = $1',
-      [mobile]
-    );
-
-    if (existingUser.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Mobile number not registered. Please contact admin.'
-      });
-    }
-
     // Generate OTP
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -111,16 +98,23 @@ const verifyOTPAndLogin = async (req, res) => {
       });
     }
 
+    // Check if user exists
+    const userResult = await db.query(
+      `SELECT * FROM users WHERE phone = $1`,
+      [mobile]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found. Please register first.'
+      });
+    }
+
     // Mark OTP as used
     await db.query(
       'UPDATE otps SET is_used = TRUE WHERE id = $1',
       [otpResult.rows[0].id]
-    );
-
-    // Get user
-    const userResult = await db.query(
-      `SELECT * FROM users WHERE phone = $1`,
-      [mobile]
     );
 
     const user = userResult.rows[0];
@@ -156,6 +150,67 @@ const verifyOTPAndLogin = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Login failed'
+    });
+  }
+};
+
+// ─── REGISTER BIDDER ──────────────────────────────────────────────────────────
+
+const registerBidder = async (req, res) => {
+  try {
+    const { phone, email, name, company_name, city, state } = req.body;
+
+    if (!phone || !name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone and name are required'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await db.query(
+      'SELECT id FROM users WHERE phone = $1',
+      [phone]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile number already registered'
+      });
+    }
+
+    // Create user
+    const userResult = await db.query(
+      `INSERT INTO users (phone, email, name, role, kyc_status, is_active)
+       VALUES ($1, $2, $3, 'bidder', 'pending', true)
+       RETURNING *`,
+      [phone, email, name]
+    );
+
+    const user = userResult.rows[0];
+
+    // Create bidder profile
+    await db.query(
+      `INSERT INTO bidders (user_id, company_name, city, state, kyc_status)
+       VALUES ($1, $2, $3, $4, 'pending')`,
+      [user.id, company_name, city, state]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful! Please login.',
+      data: {
+        userId: user.id,
+        phone: user.phone
+      }
+    });
+
+  } catch (err) {
+    console.error('registerBidder error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Registration failed'
     });
   }
 };
@@ -204,6 +259,7 @@ const logout = async (req, res) => {
 module.exports = {
   sendOTP,
   verifyOTPAndLogin,
+  registerBidder,
   getMe,
   logout
 };
