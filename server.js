@@ -69,11 +69,14 @@ app.get('/health', async (req, res) => {
 
 // ─── API ROUTES ───────────────────────────────
 app.use('/api/auth',                        require('./routes/authRoutes'));
+app.use('/api/clients',                     require('./routes/clientRoutes'));
+app.use('/api/materials',                   require('./routes/materialRoutes'));
+app.use('/api/bidders',                     require('./routes/bidderRoutes'));
 app.use('/api/auctions',                    require('./routes/auctionRoutes'));
 app.use('/api/auctions/:auctionId/lots',    require('./routes/lotRoutes'));
 app.use('/api/bids',                        require('./routes/bidRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/users',                       require('./routes/userRoutes'));
+app.use('/api/payments',                    require('./routes/paymentRoutes'));
 
 // ─── SOCKET.IO LIVE BIDDING ───────────────────
 // ─── SOCKET.IO LIVE BIDDING ───────────────────

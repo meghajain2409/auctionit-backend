@@ -15,8 +15,8 @@ const protect = async (req, res, next) => {
     const decoded = verifyAccessToken(token);
 
     const result = await db.query(
-      `SELECT id, mobile, email, full_name, role, account_status
-       FROM users WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT id, phone, email, name, role, is_active
+       FROM users WHERE id = $1`,
       [decoded.userId]
     );
 
@@ -29,7 +29,7 @@ const protect = async (req, res, next) => {
 
     const user = result.rows[0];
 
-    if (user.account_status !== 'active') {
+    if (!user.is_active) {
       return res.status(403).json({
         success: false,
         message: 'Account is suspended or deactivated'
