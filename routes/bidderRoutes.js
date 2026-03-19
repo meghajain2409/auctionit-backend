@@ -3,6 +3,10 @@ const router = express.Router();
 const bidderController = require('../controllers/bidderController');
 const { protect, authorize } = require('../middleware/auth');
 
+// MY PROFILE (must be before /:id to avoid conflict)
+router.get('/my-profile', protect, bidderController.getMyProfile);
+router.put('/my-profile', protect, bidderController.updateMyProfile);
+
 // BIDDER PROFILE
 router.get('/', protect, authorize('super_admin', 'account_manager', 'operations'), bidderController.getAllBidders);
 router.get('/:id', protect, bidderController.getBidderById);

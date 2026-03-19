@@ -1,13 +1,54 @@
 const bidderService = require('../services/bidderService');
+const db = require('../config/db');
 
-// BIDDER PROFILE
+// ─── MY PROFILE (for bidders to get/update their own profile) ────────────────
+
+exports.getMyProfile = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT b.*, u.name, u.phone, u.email, u.kyc_status, u.is_active AS user_active
+       FROM bidders b
+       JOIN users u ON b.user_id = u.id
+       WHERE b.user_id = $1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Bidder profile not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('getMyProfile error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching profile' });
+  }
+};
+
+exports.updateMyProfile = async (req, res) => {
+  try {
+    // Find bidder ID for this user
+    const bidder = await db.query('SELECT id FROM bidders WHERE user_id = $1', [req.user.id]);
+    if (bidder.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Bidder profile not found' });
+    }
+
+    const updated = await bidderService.updateBidder(bidder.rows[0].id, req.body);
+    if (!updated) return res.status(404).json({ success: false, message: 'Update failed' });
+
+    res.json({ success: true, message: 'Profile updated successfully', data: updated });
+  } catch (error) {
+    console.error('updateMyProfile error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Error updating profile' });
+  }
+};
+
+// ─── ADMIN: BIDDER MANAGEMENT ────────────────────────────────────────────────
+
 exports.getAllBidders = async (req, res) => {
   try {
     const filters = {
       kyc_status: req.query.kyc_status,
       is_active: req.query.is_active,
-      city: req.query.city,
-      state: req.query.state,
       search: req.query.search,
       page: parseInt(req.query.page) || 1,
       limit: parseInt(req.query.limit) || 20
