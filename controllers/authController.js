@@ -61,7 +61,7 @@ const sendOTP = async (req, res) => {
           'authkey': process.env.MSG91_AUTH_KEY || '500682AFiWg08QW69b78f28P1'
         },
         body: JSON.stringify({
-          template_id: process.env.MSG91_TEMPLATE_ID || '69b790e0510abac7020cf1a3',
+          template_id: process.env.MSG91_TEMPLATE_ID || '69bbd14629f68baa5a07d9c2',
           mobile: `91${mobile}`,
           otp: otp
         })
@@ -70,7 +70,7 @@ const sendOTP = async (req, res) => {
       const msg91Data = await msg91Response.json();
       console.log('  📨 MSG91 response:', JSON.stringify(msg91Data));
 
-      if (msg91Data.type === 'success' || msg91Data.type === 'otp_sent') {
+      if (msg91Data.type === 'success') {
         smsSent = true;
       }
     } catch (smsErr) {
