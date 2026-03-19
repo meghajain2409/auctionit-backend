@@ -120,13 +120,12 @@ const getAuction = async (req, res) => {
     }
 
     const lotsResult = await db.query(
-      `SELECT al.*, m.name AS material_name,
+      `SELECT al.*,
         COUNT(b.id) AS total_bids, MAX(b.bid_amount) AS highest_bid
        FROM auction_lots al
-       LEFT JOIN materials m ON m.id = al.material_id
        LEFT JOIN bids b ON b.lot_id = al.id
        WHERE al.auction_id = $1
-       GROUP BY al.id, m.name
+       GROUP BY al.id
        ORDER BY al.lot_number ASC`, [id]
     );
 
