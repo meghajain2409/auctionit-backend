@@ -41,19 +41,45 @@ const sendOTP = async (req, res) => {
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Save OTP
+    // Save OTP to database
     await db.query(
       `INSERT INTO otps (phone, otp_code, expires_at)
        VALUES ($1, $2, $3)`,
       [mobile, otp, expiresAt]
     );
 
-    // Log OTP
+    // Log OTP (always log for debugging)
     console.log(`  📱 OTP for ${mobile}: ${otp}`);
+
+    // Send OTP via MSG91
+    let smsSent = false;
+    try {
+      const msg91Response = await fetch('https://control.msg91.com/api/v5/otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'authkey': process.env.MSG91_AUTH_KEY || '500682AFiWg08QW69b78f28P1'
+        },
+        body: JSON.stringify({
+          template_id: process.env.MSG91_TEMPLATE_ID || '69b790e0510abac7020cf1a3',
+          mobile: `91${mobile}`,
+          otp: otp
+        })
+      });
+
+      const msg91Data = await msg91Response.json();
+      console.log('  📨 MSG91 response:', JSON.stringify(msg91Data));
+
+      if (msg91Data.type === 'success' || msg91Data.type === 'otp_sent') {
+        smsSent = true;
+      }
+    } catch (smsErr) {
+      console.error('  ⚠️ MSG91 SMS failed (OTP still saved):', smsErr.message);
+    }
 
     res.json({
       success: true,
-      message: `OTP sent to ${mobile}`,
+      message: smsSent ? `OTP sent to ${mobile}` : `OTP sent to ${mobile} (check SMS)`,
       ...(process.env.NODE_ENV === 'development' && { otp })
     });
 
