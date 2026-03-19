@@ -240,9 +240,9 @@ const registerBidder = async (req, res) => {
 
     // Create bidder profile
     await client.query(
-      `INSERT INTO bidders (user_id, company_name, city, state, kyc_status)
-       VALUES ($1, $2, $3, $4, 'pending')`,
-      [user.id, company_name || null, city || null, state || null]
+      `INSERT INTO bidders (user_id, company_name, contact_person)
+       VALUES ($1, $2, $3)`,
+      [user.id, company_name || null, name]
     );
 
     console.log('✅ Bidder profile created for user:', user.id);
