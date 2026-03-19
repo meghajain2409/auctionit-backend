@@ -241,11 +241,25 @@ const registerBidder = async (req, res) => {
     // Generate unique bidder code (BID-XXXXXX)
     const bidderCode = 'BID-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
 
-    // Create bidder profile
+    // Create bidder profile (use defaults for empty fields — many columns are NOT NULL)
     await client.query(
-      `INSERT INTO bidders (user_id, bidder_code, company_name, contact_person)
-       VALUES ($1, $2, $3, $4)`,
-      [user.id, bidderCode, company_name || null, name]
+      `INSERT INTO bidders (user_id, bidder_code, company_name, contact_person, business_type, bidder_type, registration_fee_paid, total_bids_placed, total_auctions_won, total_purchase_value, win_rate, is_active, blacklisted)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        user.id,
+        bidderCode,
+        company_name || name,        // fallback to user's name if empty
+        name,                         // contact_person
+        'individual',                 // business_type
+        'free',                       // bidder_type
+        false,                        // registration_fee_paid
+        0,                            // total_bids_placed
+        0,                            // total_auctions_won
+        0,                            // total_purchase_value
+        0,                            // win_rate
+        true,                         // is_active
+        false                         // blacklisted
+      ]
     );
 
     console.log('✅ Bidder profile created for user:', user.id);
