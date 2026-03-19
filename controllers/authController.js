@@ -238,11 +238,14 @@ const registerBidder = async (req, res) => {
     const user = userResult.rows[0];
     console.log('✅ User created:', user.id);
 
+    // Generate unique bidder code (BID-XXXXXX)
+    const bidderCode = 'BID-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+
     // Create bidder profile
     await client.query(
-      `INSERT INTO bidders (user_id, company_name, contact_person)
-       VALUES ($1, $2, $3)`,
-      [user.id, company_name || null, name]
+      `INSERT INTO bidders (user_id, bidder_code, company_name, contact_person)
+       VALUES ($1, $2, $3, $4)`,
+      [user.id, bidderCode, company_name || null, name]
     );
 
     console.log('✅ Bidder profile created for user:', user.id);
