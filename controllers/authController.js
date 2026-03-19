@@ -154,11 +154,15 @@ const verifyOTPAndLogin = async (req, res) => {
   }
 };
 
-// ─── REGISTER BIDDER ──────────────────────────────────────────────────────────
+// ─── REGISTER BIDDER (FIXED - with transaction) ──────────────────────────────
 
 const registerBidder = async (req, res) => {
+  const client = await db.getClient(); // Get a dedicated client for transaction
+
   try {
     const { phone, email, name, company_name, city, state, otp } = req.body;
+
+    console.log('📝 Registration attempt:', { phone, name, email, company_name, city, state, otp: otp ? '***' : 'missing' });
 
     if (!phone || !name || !otp) {
       return res.status(400).json({
@@ -167,8 +171,8 @@ const registerBidder = async (req, res) => {
       });
     }
 
-    // Verify OTP first
-    const otpResult = await db.query(
+    // Verify OTP first (before starting transaction)
+    const otpResult = await client.query(
       `SELECT * FROM otps
        WHERE phone = $1
        AND otp_code = $2
@@ -187,40 +191,64 @@ const registerBidder = async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = await db.query(
+    const existingUser = await client.query(
       'SELECT id FROM users WHERE phone = $1',
       [phone]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Mobile number already registered'
-      });
+      // ── FIX: Check if bidder profile exists too ──
+      // If user exists but bidder profile is missing (orphaned from a previous failed attempt),
+      // clean up and let them re-register
+      const existingBidder = await client.query(
+        'SELECT id FROM bidders WHERE user_id = $1',
+        [existingUser.rows[0].id]
+      );
+
+      if (existingBidder.rows.length > 0) {
+        // Both user and bidder exist — genuinely already registered
+        return res.status(400).json({
+          success: false,
+          message: 'Mobile number already registered. Please login.'
+        });
+      }
+
+      // User exists but no bidder profile — delete orphaned user and re-register
+      console.log('🧹 Cleaning up orphaned user record for:', phone);
+      await client.query('DELETE FROM users WHERE id = $1', [existingUser.rows[0].id]);
     }
 
+    // ── BEGIN TRANSACTION ──
+    await client.query('BEGIN');
+
     // Mark OTP as used
-    await db.query(
+    await client.query(
       'UPDATE otps SET is_used = TRUE WHERE id = $1',
       [otpResult.rows[0].id]
     );
 
     // Create user
-    const userResult = await db.query(
+    const userResult = await client.query(
       `INSERT INTO users (phone, email, name, role, kyc_status, is_active)
        VALUES ($1, $2, $3, 'bidder', 'pending', true)
        RETURNING *`,
-      [phone, email, name]
+      [phone, email || null, name]
     );
 
     const user = userResult.rows[0];
+    console.log('✅ User created:', user.id);
 
     // Create bidder profile
-    await db.query(
+    await client.query(
       `INSERT INTO bidders (user_id, company_name, city, state, kyc_status)
        VALUES ($1, $2, $3, $4, 'pending')`,
-      [user.id, company_name, city, state]
+      [user.id, company_name || null, city || null, state || null]
     );
+
+    console.log('✅ Bidder profile created for user:', user.id);
+
+    // ── COMMIT TRANSACTION ──
+    await client.query('COMMIT');
 
     res.status(201).json({
       success: true,
@@ -232,11 +260,21 @@ const registerBidder = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('registerBidder error:', err);
+    // ── ROLLBACK on any error ──
+    await client.query('ROLLBACK');
+    console.error('❌ registerBidder error:', err.message);
+    console.error('   Detail:', err.detail || 'none');
+    console.error('   Table:', err.table || 'unknown');
+    console.error('   Column:', err.column || 'unknown');
+    console.error('   Constraint:', err.constraint || 'none');
+
     res.status(500).json({
       success: false,
-      message: 'Registration failed'
+      message: 'Registration failed. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && { error: err.message })
     });
+  } finally {
+    client.release(); // Always release the client back to pool
   }
 };
 
